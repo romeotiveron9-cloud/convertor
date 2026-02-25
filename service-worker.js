@@ -1,4 +1,5 @@
-const CACHE = "worktime-cache-v1";
+const CACHE_NAME = "worktime-cache-v2";
+
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,47 +10,39 @@ const ASSETS = [
   "./icons/icon-512.png"
 ];
 
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+  );
   self.skipWaiting();
 });
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.map(k => k !== CACHE ? caches.delete(k) : null));
-    await self.clients.claim();
-  })());
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : null)))
+    )
+  );
+  self.clients.claim();
 });
 
-self.addEventListener("fetch", (e) => {
-  const req = e.request;
-  const url = new URL(req.url);
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
 
-  if (url.origin !== self.location.origin) return;
-
-  // Navigation: network-first, offline fallback
   if (req.mode === "navigate") {
-    e.respondWith((async () => {
-      try {
-        const fresh = await fetch(req);
-        const cache = await caches.open(CACHE);
-        cache.put("./index.html", fresh.clone());
-        return fresh;
-      } catch {
-        return (await caches.match("./index.html")) || new Response("Offline");
-      }
-    })());
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
+          return res;
+        })
+        .catch(() => caches.match("./index.html"))
+    );
     return;
   }
 
-  // Static: cache-first
-  e.respondWith((async () => {
-    const cached = await caches.match(req);
-    if (cached) return cached;
-    const res = await fetch(req);
-    const cache = await caches.open(CACHE);
-    cache.put(req, res.clone());
-    return res;
-  })());
+  event.respondWith(
+    caches.match(req).then((cached) => cached || fetch(req))
+  );
 });
