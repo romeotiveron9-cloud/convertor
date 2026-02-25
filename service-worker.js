@@ -29,6 +29,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
 
+  // Network-first per le navigazioni, cache-first per asset
   if (req.mode === "navigate") {
     event.respondWith(
       fetch(req)
