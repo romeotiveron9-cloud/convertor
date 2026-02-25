@@ -1,4 +1,4 @@
-const CACHE_NAME = "worktime-cache-v4";
+const CACHE_NAME = "worktime-cache-v5";
 
 const ASSETS = [
   "./",
