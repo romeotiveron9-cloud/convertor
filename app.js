@@ -1,4 +1,6 @@
-const STORAGE_KEY = "worktime_settings_v1";
+/* WorkTime Converter - app.js (PWA friendly for GitHub Pages) */
+
+const STORAGE_KEY = "worktime_settings_v2";
 
 const i18n = {
   it: {
@@ -56,6 +58,7 @@ const currencySymbols = { EUR: "€", USD: "$", GBP: "£" };
 function getDefaultSettings() {
   return { wage: "", theme: "system", lang: "it", currency: "EUR" };
 }
+
 function loadSettings() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -64,6 +67,7 @@ function loadSettings() {
     return getDefaultSettings();
   }
 }
+
 function saveSettings(s) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 }
@@ -72,10 +76,13 @@ function setThemeColor(color) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", color);
 }
+
 function syncThemeColorWithSystem() {
-  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const prefersDark =
+    window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   setThemeColor(prefersDark ? "#0b1220" : "#ffffff");
 }
+
 function setTheme(theme) {
   const root = document.documentElement;
   if (theme === "system") {
@@ -104,10 +111,13 @@ function applyLanguage(lang) {
 
 function formatNumber(n, decimals = 2) {
   if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
 }
 
-// Accetta "12,50" e "12.50"
+// Accept both "12,50" and "12.50"
 function parseFlexibleNumber(str) {
   if (typeof str !== "string") return NaN;
   let s = str.trim().replace(/\s/g, "");
@@ -188,11 +198,65 @@ function closeModal() {
   document.getElementById("settingsModal").hidden = true;
 }
 
-function setupServiceWorker() {
-  if (!("serviceWorker" in navigator)) return;
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+/**
+ * PWA installability checks + SW registration (GitHub Pages friendly)
+ * - scope forced to "./"
+ * - logs any missing requirement (manifest unreachable, SW not controlling, etc.)
+ */
+async function setupServiceWorkerAndDiagnostics() {
+  // Basic diagnostics to help you in DevTools console
+  const log = (...args) => console.log("[WorkTime PWA]", ...args);
+  const warn = (...args) => console.warn("[WorkTime PWA]", ...args);
+
+  // 1) Check manifest reachable
+  try {
+    const res = await fetch("./manifest.webmanifest", { cache: "no-store" });
+    if (!res.ok) warn("Manifest non raggiungibile:", res.status, res.statusText);
+    else log("Manifest OK");
+  } catch (e) {
+    warn("Manifest fetch error:", e);
+  }
+
+  // 2) Register SW with explicit scope
+  if ("serviceWorker" in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.register("./service-worker.js", { scope: "./" });
+      log("Service Worker registrato. Scope:", reg.scope);
+
+      // Wait for control
+      if (!navigator.serviceWorker.controller) {
+        log("SW non controlla ancora la pagina (normale al primo load). Ricarica una volta.");
+      } else {
+        log("SW sta controllando la pagina ✅");
+      }
+
+      // Optional: update check
+      reg.update().catch(() => {});
+    } catch (e) {
+      warn("Service Worker registration error:", e);
+    }
+  } else {
+    warn("Service Worker non supportato dal browser");
+  }
+
+  // 3) Install prompt diagnostics
+  window.addEventListener("beforeinstallprompt", (e) => {
+    log("beforeinstallprompt ricevuto ✅ (installazione disponibile)");
+    // We don't call e.preventDefault() to not block Chrome's default behavior
   });
+
+  window.addEventListener("appinstalled", () => {
+    log("App installata ✅");
+  });
+
+  // 4) Quick checks for secure context / display mode
+  const isSecure = window.isSecureContext;
+  if (!isSecure) warn("Non sei in un contesto sicuro (HTTPS). Senza HTTPS niente installazione.");
+
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+  log("Display-mode standalone:", isStandalone);
+
+  // Note: On some Android builds, if criteria fail, Chrome shows only "Create shortcut".
 }
 
 (function init() {
@@ -223,7 +287,7 @@ function setupServiceWorker() {
   applyLanguage(langSelect.value);
   updateCurrencyUI(currencySelect.value);
 
-  // system theme change listener
+  // system theme listener
   const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   if (mq) {
     mq.addEventListener("change", () => {
@@ -270,7 +334,6 @@ function setupServiceWorker() {
     const dict = i18n[settings.lang] || i18n.it;
     const text =
       `${document.getElementById("resultMain").textContent} (${document.getElementById("resultSub").textContent})`;
-
     try {
       await navigator.clipboard.writeText(text);
       const old = copyBtn.textContent;
@@ -280,5 +343,9 @@ function setupServiceWorker() {
   });
 
   computeAndRender(settings);
-  setupServiceWorker();
+
+  // Run SW + diagnostics AFTER load (safer on some devices)
+  window.addEventListener("load", () => {
+    setupServiceWorkerAndDiagnostics();
+  });
 })();
