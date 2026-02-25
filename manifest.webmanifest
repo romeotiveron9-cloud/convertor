@@ -1,7 +1,7 @@
 {
-  "name": "WorkTime - Hours Converter",
+  "name": "WorkTime",
   "short_name": "WorkTime",
-  "description": "Converti un prezzo in ore di lavoro in base alla tua paga oraria.",
+  "description": "Converti un costo nel tempo di lavoro necessario per permettertelo.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
