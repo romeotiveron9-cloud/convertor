@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#ffffff" />
   <title>WorkTime Converter</title>
 
-  <!-- ✅ usa manifest.json (più compatibile) -->
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
@@ -30,6 +29,7 @@
   </header>
 
   <main class="container">
+    <!-- Paga oraria sopra -->
     <section class="wage-card" aria-label="Paga oraria">
       <label class="label" for="wageInput" data-i18n="hourlyWageLabel">Paga oraria</label>
       <div class="input-row">
@@ -39,6 +39,7 @@
       <div class="hint" data-i18n="hourlyWageHint">Inserisci quanto guadagni per ogni ora di lavoro.</div>
     </section>
 
+    <!-- Convertitore al centro -->
     <section class="converter-card" aria-label="Convertitore">
       <h1 class="title" data-i18n="converterTitle">Convertitore</h1>
 
@@ -58,12 +59,18 @@
         <button id="copyBtn" class="btn" type="button" data-i18n="copy">Copia</button>
       </div>
 
+      <!-- ✅ Bottone installazione PWA (appare solo quando disponibile) -->
+      <button id="installBtn" class="btn install" type="button" hidden data-i18n="install">
+        Installa app
+      </button>
+
       <div class="tiny" data-i18n="note">
         Nota: il calcolo è “prezzo ÷ paga oraria”.
       </div>
     </section>
   </main>
 
+  <!-- Modale impostazioni -->
   <div class="modal-backdrop" id="settingsBackdrop" hidden></div>
   <section class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
     <div class="modal-header">
