@@ -1,372 +1,282 @@
-const STORAGE = "worktime_min_pwa_v1";
-const RATES_STORAGE = "worktime_rates_cache_v1";
-const RATES_TTL_MS = 1000 * 60 * 60 * 12; // 12h
+const STORAGE_KEY = "worktime_settings_v1";
 
 const i18n = {
   it: {
-    tagline: "Prezzo → tempo di lavoro",
-    install: "Installa",
-    wageLabel: "Paga oraria",
-    wageHint: "Quanto guadagni per 1 ora.",
-    costLabel: "Costo",
-    costHint: "Quanto costa l’oggetto.",
+    tagline: "Converti prezzi in ore di lavoro",
+    hourlyWageLabel: "Paga oraria",
+    hourlyWageHint: "Inserisci quanto guadagni per ogni ora di lavoro.",
+    converterTitle: "Convertitore",
+    priceLabel: "Prezzo",
     clear: "Pulisci",
     copy: "Copia",
-    settings: "Impostazioni",
-    theme: "Tema",
-    system: "Sistema",
-    light: "Chiaro",
-    dark: "Scuro",
-    language: "Lingua",
+    note: "Nota: il calcolo è “prezzo ÷ paga oraria”.",
+    settingsTitle: "Impostazioni",
+    themeLabel: "Tema",
+    themeSystem: "Sistema",
+    themeLight: "Chiaro",
+    themeDark: "Scuro",
+    languageLabel: "Lingua",
+    currencyLabel: "Valuta",
+    currencyHint: "Serve solo per mostrare il simbolo.",
     save: "Salva",
-    copied: "Copiato!",
-    needValues: "Inserisci paga e costo",
-    invalid: "Valori non validi",
-    calcMoney: (cost, cur) => `Costo convertito: ${cost} ${cur}`,
-    calcRate: (from, to, r, source) => `Cambio: 1 ${from} = ${r} ${to} (${source})`,
-    manualRateTitle: "Tasso di cambio (manuale)",
-    tryLive: "Prova live",
-    manualRateLabel: (from, to) => `1 ${from} = ? ${to}`
+    resultEmpty: "Inserisci paga e prezzo",
+    resultInvalid: "Valori non validi",
+    resultMain: (h, m) => `${h}h ${m}m`,
+    resultSub: (hoursDec) => `≈ ${formatNumber(hoursDec, 2)} ore`,
+    copied: "Copiato!"
   },
   en: {
-    tagline: "Price → work time",
-    install: "Install",
-    wageLabel: "Hourly wage",
-    wageHint: "How much you earn per hour.",
-    costLabel: "Cost",
-    costHint: "How much the item costs.",
+    tagline: "Convert prices into work hours",
+    hourlyWageLabel: "Hourly wage",
+    hourlyWageHint: "Enter how much you earn per hour.",
+    converterTitle: "Converter",
+    priceLabel: "Price",
     clear: "Clear",
     copy: "Copy",
-    settings: "Settings",
-    theme: "Theme",
-    system: "System",
-    light: "Light",
-    dark: "Dark",
-    language: "Language",
+    note: "Note: calculation is “price ÷ hourly wage”.",
+    settingsTitle: "Settings",
+    themeLabel: "Theme",
+    themeSystem: "System",
+    themeLight: "Light",
+    themeDark: "Dark",
+    languageLabel: "Language",
+    currencyLabel: "Currency",
+    currencyHint: "Only used to display the symbol.",
     save: "Save",
-    copied: "Copied!",
-    needValues: "Enter wage and cost",
-    invalid: "Invalid values",
-    calcMoney: (cost, cur) => `Converted cost: ${cost} ${cur}`,
-    calcRate: (from, to, r, source) => `FX: 1 ${from} = ${r} ${to} (${source})`,
-    manualRateTitle: "Exchange rate (manual)",
-    tryLive: "Try live",
-    manualRateLabel: (from, to) => `1 ${from} = ? ${to}`
+    resultEmpty: "Enter wage and price",
+    resultInvalid: "Invalid values",
+    resultMain: (h, m) => `${h}h ${m}m`,
+    resultSub: (hoursDec) => `≈ ${formatNumber(hoursDec, 2)} hours`,
+    copied: "Copied!"
   }
 };
 
-const $ = (id) => document.getElementById(id);
+const currencySymbols = { EUR: "€", USD: "$", GBP: "£" };
 
-function loadState(){
-  try{
-    const raw = localStorage.getItem(STORAGE);
-    return raw ? JSON.parse(raw) : { theme:"system", lang:"it", wageCur:"EUR", costCur:"EUR", wage:"", cost:"" };
-  }catch{
-    return { theme:"system", lang:"it", wageCur:"EUR", costCur:"EUR", wage:"", cost:"" };
+function getDefaultSettings() {
+  return { wage: "", theme: "system", lang: "it", currency: "EUR" };
+}
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? { ...getDefaultSettings(), ...JSON.parse(raw) } : getDefaultSettings();
+  } catch {
+    return getDefaultSettings();
   }
 }
-function saveState(s){ localStorage.setItem(STORAGE, JSON.stringify(s)); }
+function saveSettings(s) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+}
 
-function setTheme(theme){
+function setThemeColor(color) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", color);
+}
+function syncThemeColorWithSystem() {
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  setThemeColor(prefersDark ? "#0b1220" : "#ffffff");
+}
+function setTheme(theme) {
   const root = document.documentElement;
-  if(theme === "system"){
+  if (theme === "system") {
     root.removeAttribute("data-theme");
     syncThemeColorWithSystem();
-  }else{
-    root.setAttribute("data-theme", theme);
-    setThemeColor(theme === "dark" ? "#0b0f18" : "#ffffff");
+    return;
   }
-}
-function setThemeColor(c){
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.setAttribute("content", c);
-}
-function syncThemeColorWithSystem(){
-  const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  setThemeColor(dark ? "#0b0f18" : "#ffffff");
+  root.setAttribute("data-theme", theme);
+  setThemeColor(theme === "dark" ? "#0b1220" : "#ffffff");
 }
 
-function applyLang(lang){
-  const dict = i18n[lang] || i18n.it;
+function applyLanguage(lang) {
   document.documentElement.lang = lang;
-  document.querySelectorAll("[data-i18n]").forEach(el=>{
-    const k = el.getAttribute("data-i18n");
-    if(dict[k]) el.textContent = dict[k];
+  const dict = i18n[lang] || i18n.it;
+
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (dict[key]) el.textContent = dict[key];
   });
 
-  $("wage").placeholder = (lang === "en") ? "e.g. 12.50" : "es. 12,50";
-  $("cost").placeholder = (lang === "en") ? "e.g. 79.99" : "es. 79,99";
+  const wageInput = document.getElementById("wageInput");
+  const priceInput = document.getElementById("priceInput");
+  if (wageInput) wageInput.placeholder = (lang === "en") ? "e.g. 12.50" : "es. 12,50";
+  if (priceInput) priceInput.placeholder = (lang === "en") ? "e.g. 79.99" : "es. 79,99";
 }
 
-function formatNum(n, digits=2){
-  if(!Number.isFinite(n)) return "—";
-  return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+function formatNumber(n, decimals = 2) {
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-/* accetta 12,50 e 12.50 */
-function parseFlex(s){
-  if(typeof s !== "string") return NaN;
-  const t = s.trim().replace(/\s/g,"");
-  if(!t) return NaN;
+// Accetta "12,50" e "12.50"
+function parseFlexibleNumber(str) {
+  if (typeof str !== "string") return NaN;
+  let s = str.trim().replace(/\s/g, "");
+  if (!s) return NaN;
 
-  let x = t;
-  const hasC = x.includes(",");
-  const hasD = x.includes(".");
-  if(hasC && !hasD) x = x.replace(",", ".");
-  else if(hasC && hasD){
-    const lc = x.lastIndexOf(",");
-    const ld = x.lastIndexOf(".");
-    const dec = lc > ld ? "," : ".";
-    const thou = dec === "," ? "." : ",";
-    x = x.split(thou).join("");
-    if(dec === ",") x = x.replace(",", ".");
-  }
-  return Number(x);
-}
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
 
-function hmFromHours(hours){
-  const mins = Math.round(hours * 60);
-  const h = Math.floor(mins/60);
-  const m = mins % 60;
-  return {h,m};
-}
-
-/* ---------- FX RATES (live + cache) ----------
-   Usiamo Frankfurter (ECB-based). Se offline o errore: fallback a rate manuale.
-*/
-function loadRatesCache(){
-  try{
-    const raw = localStorage.getItem(RATES_STORAGE);
-    return raw ? JSON.parse(raw) : null;
-  }catch{return null;}
-}
-function saveRatesCache(obj){
-  localStorage.setItem(RATES_STORAGE, JSON.stringify(obj));
-}
-function cacheValid(cache){
-  return cache && cache.ts && (Date.now() - cache.ts) < RATES_TTL_MS && cache.rates;
-}
-
-async function fetchRates(base){
-  // Frankfurter API: https://api.frankfurter.app/latest?from=EUR
-  const url = `https://api.frankfurter.app/latest?from=${encodeURIComponent(base)}`;
-  const res = await fetch(url, { cache:"no-store" });
-  if(!res.ok) throw new Error("rates_fetch_failed");
-  const data = await res.json();
-  // data.rates: { USD: 1.09, ... } meaning 1 base = rate target
-  return { base: data.base, date: data.date, rates: data.rates };
-}
-
-async function getRate(from, to){
-  if(from === to) return { rate: 1, source: "same" };
-
-  // 1) cache
-  const cache = loadRatesCache();
-  if(cacheValid(cache) && cache.base === from && cache.rates[to]){
-    return { rate: cache.rates[to], source: "cache" };
+  if (hasComma && !hasDot) {
+    s = s.replace(",", ".");
+  } else if (hasComma && hasDot) {
+    const lastComma = s.lastIndexOf(",");
+    const lastDot = s.lastIndexOf(".");
+    const decSep = lastComma > lastDot ? "," : ".";
+    const thouSep = decSep === "," ? "." : ",";
+    s = s.split(thouSep).join("");
+    if (decSep === ",") s = s.replace(",", ".");
   }
 
-  // 2) live fetch
-  try{
-    const data = await fetchRates(from);
-    saveRatesCache({ ts: Date.now(), base: from, date: data.date, rates: data.rates });
-    if(data.rates[to]) return { rate: data.rates[to], source: "live" };
-  }catch{
-    // ignore
-  }
-
-  return { rate: null, source: "none" };
+  const v = Number(s);
+  return v;
 }
 
-/* ---------- UI / CALC ---------- */
-function openSettings(){
-  $("backdrop").hidden = false;
-  $("modal").hidden = false;
-}
-function closeSettings(){
-  $("backdrop").hidden = true;
-  $("modal").hidden = true;
+function hoursToHM(hoursDec) {
+  const totalMinutes = Math.round(hoursDec * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return { h, m };
 }
 
-function updateManualRateUI(state){
-  const dict = i18n[state.lang] || i18n.it;
-  $("manualRateLabel").textContent = dict.manualRateLabel(state.costCur, state.wageCur);
+function updateCurrencyUI(currency) {
+  const sym = currencySymbols[currency] || "€";
+  const currencyPrefix = document.getElementById("currencyPrefix");
+  const currencySuffix = document.getElementById("currencySuffix");
+  if (currencyPrefix) currencyPrefix.textContent = sym;
+  if (currencySuffix) currencySuffix.textContent = `${sym}/h`;
 }
 
-async function compute(state){
-  const dict = i18n[state.lang] || i18n.it;
+function computeAndRender(settings) {
+  const wageInput = document.getElementById("wageInput");
+  const priceInput = document.getElementById("priceInput");
+  const resultMain = document.getElementById("resultMain");
+  const resultSub = document.getElementById("resultSub");
 
-  const wage = parseFlex($("wage").value);
-  const cost = parseFlex($("cost").value);
+  const dict = i18n[settings.lang] || i18n.it;
 
-  const wageCur = $("wageCur").value;
-  const costCur = $("costCur").value;
+  const wageRaw = wageInput.value.trim();
+  const priceRaw = priceInput.value.trim();
 
-  state.wageCur = wageCur;
-  state.costCur = costCur;
-  state.wage = $("wage").value;
-  state.cost = $("cost").value;
-  saveState(state);
-
-  $("moneyOut").textContent = "";
-  $("rateOut").textContent = "";
-  $("timeOut").textContent = "—";
-
-  if(!$("wage").value.trim() || !$("cost").value.trim()){
-    $("moneyOut").textContent = dict.needValues;
-    $("manualRateBox").hidden = true;
+  if (!wageRaw || !priceRaw) {
+    resultMain.textContent = "—";
+    resultSub.textContent = dict.resultEmpty;
     return;
   }
 
-  if(!Number.isFinite(wage) || !Number.isFinite(cost) || wage <= 0 || cost < 0){
-    $("moneyOut").textContent = dict.invalid;
-    $("manualRateBox").hidden = true;
+  const wage = parseFlexibleNumber(wageRaw);
+  const price = parseFlexibleNumber(priceRaw);
+
+  if (!Number.isFinite(wage) || !Number.isFinite(price) || wage <= 0 || price < 0) {
+    resultMain.textContent = "—";
+    resultSub.textContent = dict.resultInvalid;
     return;
   }
 
-  // CALCOLO 1: conversione valuta costo -> valuta paga
-  const { rate, source } = await getRate(costCur, wageCur);
+  const hoursDec = price / wage;
+  const { h, m } = hoursToHM(hoursDec);
 
-  let costInWage = null;
-  let usedRate = rate;
-
-  if(usedRate === null){
-    // prova manuale
-    $("manualRateBox").hidden = false;
-    updateManualRateUI(state);
-
-    const manual = parseFlex($("manualRate").value);
-    if(Number.isFinite(manual) && manual > 0){
-      usedRate = manual;
-      costInWage = cost * usedRate;
-      $("rateOut").textContent = dict.calcRate(costCur, wageCur, formatNum(usedRate, 6), "manual");
-    }else{
-      $("moneyOut").textContent = dict.invalid;
-      $("rateOut").textContent = dict.calcRate(costCur, wageCur, "—", "manual");
-      return;
-    }
-  }else{
-    $("manualRateBox").hidden = true;
-    costInWage = cost * usedRate;
-    $("rateOut").textContent = dict.calcRate(costCur, wageCur, formatNum(usedRate, 6), source);
-  }
-
-  $("moneyOut").textContent = dict.calcMoney(formatNum(costInWage, 2), wageCur);
-
-  // CALCOLO 2: tempo necessario
-  const hours = costInWage / wage;
-  const { h, m } = hmFromHours(hours);
-  $("timeOut").textContent = `${h}h ${m}m`;
+  resultMain.textContent = dict.resultMain(h, m);
+  resultSub.textContent = dict.resultSub(hoursDec);
 }
 
-/* ---------- Install prompt ---------- */
-function setupInstall(){
-  const btn = $("installBtn");
-  let deferred = null;
+function openModal() {
+  document.getElementById("settingsBackdrop").hidden = false;
+  document.getElementById("settingsModal").hidden = false;
+}
+function closeModal() {
+  document.getElementById("settingsBackdrop").hidden = true;
+  document.getElementById("settingsModal").hidden = true;
+}
 
-  window.addEventListener("beforeinstallprompt", (e)=>{
-    e.preventDefault();
-    deferred = e;
-    btn.hidden = false;
-  });
-
-  btn.addEventListener("click", async ()=>{
-    if(!deferred) return;
-    deferred.prompt();
-    try{ await deferred.userChoice; } finally{
-      deferred = null;
-      btn.hidden = true;
-    }
-  });
-
-  window.addEventListener("appinstalled", ()=>{
-    deferred = null;
-    btn.hidden = true;
+function setupServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
   });
 }
 
-/* ---------- Service Worker ---------- */
-function setupSW(){
-  if(!("serviceWorker" in navigator)) return;
-  window.addEventListener("load", async ()=>{
-    try{ await navigator.serviceWorker.register("./service-worker.js"); }catch{}
-  });
-}
+(function init() {
+  let settings = loadSettings();
 
-/* ---------- Init ---------- */
-(function init(){
-  const state = loadState();
+  const wageInput = document.getElementById("wageInput");
+  const priceInput = document.getElementById("priceInput");
 
-  // apply state
-  $("themeSel").value = state.theme || "system";
-  $("langSel").value  = state.lang || "it";
-  $("wageCur").value  = state.wageCur || "EUR";
-  $("costCur").value  = state.costCur || "EUR";
-  $("wage").value     = state.wage || "";
-  $("cost").value     = state.cost || "";
+  const openSettingsBtn = document.getElementById("openSettings");
+  const closeSettingsBtn = document.getElementById("closeSettings");
+  const backdrop = document.getElementById("settingsBackdrop");
 
-  setTheme(state.theme || "system");
-  applyLang(state.lang || "it");
+  const themeSelect = document.getElementById("themeSelect");
+  const langSelect = document.getElementById("langSelect");
+  const currencySelect = document.getElementById("currencySelect");
+  const saveSettingsBtn = document.getElementById("saveSettings");
 
-  // theme system changes
+  const clearBtn = document.getElementById("clearBtn");
+  const copyBtn = document.getElementById("copyBtn");
+
+  // Apply saved
+  wageInput.value = settings.wage || "";
+  themeSelect.value = settings.theme || "system";
+  langSelect.value = settings.lang || "it";
+  currencySelect.value = settings.currency || "EUR";
+
+  setTheme(themeSelect.value);
+  applyLanguage(langSelect.value);
+  updateCurrencyUI(currencySelect.value);
+
+  // system theme change listener
   const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-  if(mq){
-    mq.addEventListener("change", ()=>{ if(($("themeSel").value||"system")==="system") syncThemeColorWithSystem(); });
+  if (mq) {
+    mq.addEventListener("change", () => {
+      if ((settings.theme || "system") === "system") syncThemeColorWithSystem();
+    });
   }
 
-  // settings modal
-  $("settingsBtn").addEventListener("click", openSettings);
-  $("closeBtn").addEventListener("click", closeSettings);
-  $("backdrop").addEventListener("click", closeSettings);
-  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeSettings(); });
-
-  $("saveBtn").addEventListener("click", ()=>{
-    state.theme = $("themeSel").value;
-    state.lang = $("langSel").value;
-    saveState(state);
-    setTheme(state.theme);
-    applyLang(state.lang);
-    closeSettings();
-    compute(state);
+  wageInput.addEventListener("input", () => {
+    settings.wage = wageInput.value;
+    saveSettings(settings);
+    computeAndRender(settings);
   });
 
-  // inputs
-  ["wage","cost","wageCur","costCur","manualRate"].forEach(id=>{
-    $(id).addEventListener("input", ()=> compute(state));
-    $(id).addEventListener("change", ()=> compute(state));
+  priceInput.addEventListener("input", () => computeAndRender(settings));
+
+  openSettingsBtn.addEventListener("click", openModal);
+  closeSettingsBtn.addEventListener("click", closeModal);
+  backdrop.addEventListener("click", closeModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
   });
 
-  $("clearBtn").addEventListener("click", ()=>{
-    $("cost").value = "";
-    $("manualRate").value = "";
-    compute(state);
-    $("cost").focus();
+  saveSettingsBtn.addEventListener("click", () => {
+    settings.theme = themeSelect.value;
+    settings.lang = langSelect.value;
+    settings.currency = currencySelect.value;
+    saveSettings(settings);
+
+    setTheme(settings.theme);
+    applyLanguage(settings.lang);
+    updateCurrencyUI(settings.currency);
+
+    computeAndRender(settings);
+    closeModal();
   });
 
-  $("copyBtn").addEventListener("click", async ()=>{
-    const dict = i18n[state.lang] || i18n.it;
-    const t = `${$("timeOut").textContent} • ${$("moneyOut").textContent}`;
-    try{
-      await navigator.clipboard.writeText(t);
-      const old = $("copyBtn").textContent;
-      $("copyBtn").textContent = dict.copied;
-      setTimeout(()=> $("copyBtn").textContent = old, 900);
-    }catch{}
+  clearBtn.addEventListener("click", () => {
+    priceInput.value = "";
+    computeAndRender(settings);
+    priceInput.focus();
   });
 
-  $("useLiveBtn").addEventListener("click", async ()=>{
-    // forziamo un refresh cache facendo una fetch subito
-    try{
-      const from = $("costCur").value;
-      const data = await fetchRates(from);
-      saveRatesCache({ ts: Date.now(), base: from, date: data.date, rates: data.rates });
-    }catch{}
-    compute(state);
+  copyBtn.addEventListener("click", async () => {
+    const dict = i18n[settings.lang] || i18n.it;
+    const text = `${document.getElementById("resultMain").textContent} (${document.getElementById("resultSub").textContent})`;
+    try {
+      await navigator.clipboard.writeText(text);
+      const old = copyBtn.textContent;
+      copyBtn.textContent = dict.copied;
+      setTimeout(() => (copyBtn.textContent = old), 900);
+    } catch {}
   });
 
-  // first render
-  compute(state);
-
-  setupSW();
-  setupInstall();
+  computeAndRender(settings);
+  setupServiceWorker();
 })();
