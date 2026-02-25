@@ -1,13 +1,12 @@
 {
-  "name": "WorkTime",
+  "name": "WorkTime Converter",
   "short_name": "WorkTime",
-  "description": "Converti un costo nel tempo di lavoro necessario per permettertelo.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
+  "description": "Converti un prezzo in ore di lavoro in base alla tua paga oraria.",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
