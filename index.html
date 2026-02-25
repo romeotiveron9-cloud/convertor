@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>WorkTime</title>
+  <meta name="description" content="Converti un prezzo in ore di lavoro in base alla tua paga oraria." />
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#ffffff" />
+
+  <!-- iOS (Add to Home Screen) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="WorkTime">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Icons -->
+  <link rel="icon" href="icons/icon-192.png">
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">⏱️</div>
+      <div class="brand-text">
+        <div class="appname">WorkTime</div>
+        <div class="tagline" data-i18n="tagline">Converti prezzi in ore di lavoro</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <!-- Bottone install (compare solo se supportato) -->
+      <button id="installBtn" class="btn small" type="button" hidden data-i18n="install">
+        Installa
+      </button>
+      <button id="openSettings" class="icon-btn" type="button" aria-label="Impostazioni">⚙️</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Paga oraria sopra -->
+    <section class="card">
+      <label class="label" for="wageInput" data-i18n="hourlyWageLabel">Paga oraria</label>
+      <div class="input-row">
+        <input id="wageInput" inputmode="decimal" autocomplete="off" type="text" placeholder="es. 12,50" />
+        <span class="suffix" id="wageSuffix">€/h</span>
+      </div>
+      <div class="hint" data-i18n="hourlyWageHint">Inserisci quanto guadagni per ogni ora di lavoro.</div>
+    </section>
+
+    <!-- Convertitore (centrale) -->
+    <section class="card center">
+      <h1 class="title" data-i18n="converterTitle">Convertitore</h1>
+
+      <label class="label" for="priceInput" data-i18n="priceLabel">Prezzo</label>
+      <div class="input-row">
+        <input id="priceInput" inputmode="decimal" autocomplete="off" type="text" placeholder="es. 79,99" />
+        <span class="suffix" id="priceSuffix">€</span>
+      </div>
+
+      <div class="result" aria-live="polite">
+        <div class="result-main" id="resultMain">—</div>
+        <div class="result-sub" id="resultSub"></div>
+      </div>
+
+      <div class="actions">
+        <button id="clearBtn" class="btn secondary" type="button" data-i18n="clear">Pulisci</button>
+        <button id="copyBtn" class="btn" type="button" data-i18n="copy">Copia</button>
+      </div>
+
+      <div class="tiny" data-i18n="note">Nota: il calcolo è “prezzo ÷ paga oraria”.</div>
+    </section>
+  </main>
+
+  <!-- Modale impostazioni -->
+  <div class="modal-backdrop" id="settingsBackdrop" hidden></div>
+  <section class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+    <div class="modal-header">
+      <h2 id="settingsTitle" data-i18n="settingsTitle">Impostazioni</h2>
+      <button id="closeSettings" class="icon-btn" type="button" aria-label="Chiudi">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="setting">
+        <label class="label" for="themeSelect" data-i18n="themeLabel">Tema</label>
+        <select id="themeSelect">
+          <option value="system" data-i18n="themeSystem">Sistema</option>
+          <option value="light" data-i18n="themeLight">Chiaro</option>
+          <option value="dark" data-i18n="themeDark">Scuro</option>
+        </select>
+      </div>
+
+      <div class="setting">
+        <label class="label" for="langSelect" data-i18n="languageLabel">Lingua</label>
+        <select id="langSelect">
+          <option value="it">Italiano</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+
+      <div class="setting">
+        <label class="label" for="currencySelect" data-i18n="currencyLabel">Valuta</label>
+        <select id="currencySelect">
+          <option value="EUR">EUR (€)</option>
+          <option value="USD">USD ($)</option>
+          <option value="GBP">GBP (£)</option>
+        </select>
+        <div class="hint" data-i18n="currencyHint">Serve solo per mostrare il simbolo.</div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button id="saveSettings" class="btn" type="button" data-i18n="save">Salva</button>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
