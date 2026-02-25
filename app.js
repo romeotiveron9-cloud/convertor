@@ -1,6 +1,7 @@
-const STORAGE_KEY = "worktime_settings_v3";
+const STORAGE_KEY = "worktime_settings_v4";
 
-let deferredInstallPrompt = null;
+// NON usiamo deferred prompt per non bloccare la UI di Chrome
+// (niente preventDefault su beforeinstallprompt)
 
 const i18n = {
   it: {
@@ -108,6 +109,9 @@ function applyLanguage(lang) {
   const priceInput = document.getElementById("priceInput");
   if (wageInput) wageInput.placeholder = (lang === "en") ? "e.g. 12.50" : "es. 12,50";
   if (priceInput) priceInput.placeholder = (lang === "en") ? "e.g. 79.99" : "es. 79,99";
+
+  const installBtn = document.getElementById("installBtn");
+  if (installBtn) installBtn.textContent = dict.install;
 }
 
 function formatNumber(n, decimals = 2) {
@@ -115,7 +119,6 @@ function formatNumber(n, decimals = 2) {
   return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-// Accept both "12,50" and "12.50"
 function parseFlexibleNumber(str) {
   if (typeof str !== "string") return NaN;
   let s = str.trim().replace(/\s/g, "");
@@ -195,42 +198,40 @@ function closeModal() {
   document.getElementById("settingsModal").hidden = true;
 }
 
-/* ✅ Bottone installazione */
-function setupInstallButton(settings) {
-  const installBtn = document.getElementById("installBtn");
-  if (!installBtn) return;
-
-  // Testo giusto in base alla lingua
-  installBtn.textContent = (i18n[settings.lang] || i18n.it).install;
-
-  window.addEventListener("beforeinstallprompt", (e) => {
-    // Se non lo fai, non puoi mostrare un bottone install custom
-    e.preventDefault();
-    deferredInstallPrompt = e;
-    installBtn.hidden = false;
-  });
-
-  installBtn.addEventListener("click", async () => {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    try {
-      await deferredInstallPrompt.userChoice;
-    } catch {}
-    deferredInstallPrompt = null;
-    installBtn.hidden = true;
-  });
-
-  window.addEventListener("appinstalled", () => {
-    deferredInstallPrompt = null;
-    installBtn.hidden = true;
-  });
-}
-
-/* ✅ Service Worker con scope esplicito */
 function setupServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./service-worker.js", { scope: "./" }).catch(() => {});
+  });
+}
+
+/**
+ * ✅ NON blocchiamo Chrome:
+ * ascoltiamo l’evento ma NON facciamo preventDefault.
+ * Se l’app è installabile, Chrome mostrerà “Installa app” nel menu quando vuole.
+ */
+function setupInstallHints() {
+  const installBtn = document.getElementById("installBtn");
+  if (!installBtn) return;
+
+  // Di default lo teniamo nascosto: l’installazione la gestisce Chrome dal menu.
+  // Se vuoi, puoi mostrarlo sempre come "guida" (qui lo facciamo comparire solo se Chrome segnala installabilità).
+  installBtn.hidden = true;
+
+  window.addEventListener("beforeinstallprompt", () => {
+    // NON e.preventDefault();
+    // Mostriamo un bottone “guida” che dice all’utente dove installare.
+    installBtn.hidden = false;
+  });
+
+  installBtn.addEventListener("click", () => {
+    // Non possiamo forzare il prompt se non intercettiamo l’evento.
+    // Quindi qui diamo una istruzione semplice:
+    alert("Per installare: apri il menu ⋮ di Chrome e tocca “Installa app” (se disponibile).");
+  });
+
+  window.addEventListener("appinstalled", () => {
+    installBtn.hidden = true;
   });
 }
 
@@ -252,7 +253,6 @@ function setupServiceWorker() {
   const clearBtn = document.getElementById("clearBtn");
   const copyBtn = document.getElementById("copyBtn");
 
-  // Apply saved
   wageInput.value = settings.wage || "";
   themeSelect.value = settings.theme || "system";
   langSelect.value = settings.lang || "it";
@@ -262,9 +262,8 @@ function setupServiceWorker() {
   applyLanguage(langSelect.value);
   updateCurrencyUI(currencySelect.value);
 
-  // ✅ setup install button + sw
-  setupInstallButton(settings);
   setupServiceWorker();
+  setupInstallHints();
 
   const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   if (mq) {
@@ -284,6 +283,7 @@ function setupServiceWorker() {
   openSettingsBtn.addEventListener("click", openModal);
   closeSettingsBtn.addEventListener("click", closeModal);
   backdrop.addEventListener("click", closeModal);
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeModal();
   });
@@ -297,10 +297,6 @@ function setupServiceWorker() {
     setTheme(settings.theme);
     applyLanguage(settings.lang);
     updateCurrencyUI(settings.currency);
-
-    // aggiorna testo bottone install in base alla lingua
-    const installBtn = document.getElementById("installBtn");
-    if (installBtn) installBtn.textContent = (i18n[settings.lang] || i18n.it).install;
 
     computeAndRender(settings);
     closeModal();
