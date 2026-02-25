@@ -1,6 +1,6 @@
-/* WorkTime Converter - app.js (PWA friendly for GitHub Pages) */
+const STORAGE_KEY = "worktime_settings_v3";
 
-const STORAGE_KEY = "worktime_settings_v2";
+let deferredInstallPrompt = null;
 
 const i18n = {
   it: {
@@ -11,6 +11,7 @@ const i18n = {
     priceLabel: "Prezzo",
     clear: "Pulisci",
     copy: "Copia",
+    install: "Installa app",
     note: "Nota: il calcolo è “prezzo ÷ paga oraria”.",
     settingsTitle: "Impostazioni",
     themeLabel: "Tema",
@@ -35,6 +36,7 @@ const i18n = {
     priceLabel: "Price",
     clear: "Clear",
     copy: "Copy",
+    install: "Install app",
     note: "Note: calculation is “price ÷ hourly wage”.",
     settingsTitle: "Settings",
     themeLabel: "Theme",
@@ -58,6 +60,7 @@ const currencySymbols = { EUR: "€", USD: "$", GBP: "£" };
 function getDefaultSettings() {
   return { wage: "", theme: "system", lang: "it", currency: "EUR" };
 }
+
 function loadSettings() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -66,6 +69,7 @@ function loadSettings() {
     return getDefaultSettings();
   }
 }
+
 function saveSettings(s) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 }
@@ -74,10 +78,12 @@ function setThemeColor(color) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", color);
 }
+
 function syncThemeColorWithSystem() {
   const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   setThemeColor(prefersDark ? "#0b1220" : "#ffffff");
 }
+
 function setTheme(theme) {
   const root = document.documentElement;
   if (theme === "system") {
@@ -109,6 +115,7 @@ function formatNumber(n, decimals = 2) {
   return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
+// Accept both "12,50" and "12.50"
 function parseFlexibleNumber(str) {
   if (typeof str !== "string") return NaN;
   let s = str.trim().replace(/\s/g, "");
@@ -188,43 +195,43 @@ function closeModal() {
   document.getElementById("settingsModal").hidden = true;
 }
 
-async function setupPWA() {
-  const log = (...a) => console.log("[WorkTime PWA]", ...a);
-  const warn = (...a) => console.warn("[WorkTime PWA]", ...a);
+/* ✅ Bottone installazione */
+function setupInstallButton(settings) {
+  const installBtn = document.getElementById("installBtn");
+  if (!installBtn) return;
 
-  // Check manifest reachable (now manifest.json)
-  try {
-    const res = await fetch("./manifest.json", { cache: "no-store" });
-    if (!res.ok) warn("Manifest non raggiungibile:", res.status, res.statusText);
-    else log("Manifest OK ✅");
-  } catch (e) {
-    warn("Manifest fetch error:", e);
-  }
+  // Testo giusto in base alla lingua
+  installBtn.textContent = (i18n[settings.lang] || i18n.it).install;
 
-  // Register service worker with explicit scope
-  if ("serviceWorker" in navigator) {
-    try {
-      const reg = await navigator.serviceWorker.register("./service-worker.js", { scope: "./" });
-      log("SW registrato. Scope:", reg.scope);
-
-      if (!navigator.serviceWorker.controller) {
-        log("SW non controlla ancora la pagina (primo giro). Ricarica UNA volta.");
-      } else {
-        log("SW controlla la pagina ✅");
-      }
-      reg.update().catch(() => {});
-    } catch (e) {
-      warn("SW register error:", e);
-    }
-  } else {
-    warn("Service Worker non supportato");
-  }
-
-  window.addEventListener("beforeinstallprompt", () => {
-    log("beforeinstallprompt ✅ -> installazione disponibile");
+  window.addEventListener("beforeinstallprompt", (e) => {
+    // Se non lo fai, non puoi mostrare un bottone install custom
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    installBtn.hidden = false;
   });
 
-  if (!window.isSecureContext) warn("Non sei in HTTPS: installazione impossibile.");
+  installBtn.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    try {
+      await deferredInstallPrompt.userChoice;
+    } catch {}
+    deferredInstallPrompt = null;
+    installBtn.hidden = true;
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    installBtn.hidden = true;
+  });
+}
+
+/* ✅ Service Worker con scope esplicito */
+function setupServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js", { scope: "./" }).catch(() => {});
+  });
 }
 
 (function init() {
@@ -245,6 +252,7 @@ async function setupPWA() {
   const clearBtn = document.getElementById("clearBtn");
   const copyBtn = document.getElementById("copyBtn");
 
+  // Apply saved
   wageInput.value = settings.wage || "";
   themeSelect.value = settings.theme || "system";
   langSelect.value = settings.lang || "it";
@@ -253,6 +261,10 @@ async function setupPWA() {
   setTheme(themeSelect.value);
   applyLanguage(langSelect.value);
   updateCurrencyUI(currencySelect.value);
+
+  // ✅ setup install button + sw
+  setupInstallButton(settings);
+  setupServiceWorker();
 
   const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   if (mq) {
@@ -286,6 +298,10 @@ async function setupPWA() {
     applyLanguage(settings.lang);
     updateCurrencyUI(settings.currency);
 
+    // aggiorna testo bottone install in base alla lingua
+    const installBtn = document.getElementById("installBtn");
+    if (installBtn) installBtn.textContent = (i18n[settings.lang] || i18n.it).install;
+
     computeAndRender(settings);
     closeModal();
   });
@@ -298,7 +314,9 @@ async function setupPWA() {
 
   copyBtn.addEventListener("click", async () => {
     const dict = i18n[settings.lang] || i18n.it;
-    const text = `${document.getElementById("resultMain").textContent} (${document.getElementById("resultSub").textContent})`;
+    const text =
+      `${document.getElementById("resultMain").textContent} (${document.getElementById("resultSub").textContent})`;
+
     try {
       await navigator.clipboard.writeText(text);
       const old = copyBtn.textContent;
@@ -308,6 +326,4 @@ async function setupPWA() {
   });
 
   computeAndRender(settings);
-
-  window.addEventListener("load", () => setupPWA());
 })();
