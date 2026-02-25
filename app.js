@@ -268,7 +268,9 @@ function setupServiceWorker() {
 
   copyBtn.addEventListener("click", async () => {
     const dict = i18n[settings.lang] || i18n.it;
-    const text = `${document.getElementById("resultMain").textContent} (${document.getElementById("resultSub").textContent})`;
+    const text =
+      `${document.getElementById("resultMain").textContent} (${document.getElementById("resultSub").textContent})`;
+
     try {
       await navigator.clipboard.writeText(text);
       const old = copyBtn.textContent;
